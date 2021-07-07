@@ -1,0 +1,35 @@
+from flask import Flask,render_template
+import sqlite3
+app = Flask(__name__)
+
+
+@app.route('/')
+def seehome():
+    datalist=[]
+    score_x=[]
+    score_y=[]
+    con=sqlite3.connect("douban.db")
+    cur=con.cursor()
+    sql='select * from movie250'
+    data=cur.execute(sql)
+    for item in data:
+        datalist.append(item)
+    sql2='''
+    select score,count(score) from movie250 group by score
+    '''
+    scorelist=cur.execute(sql2)
+    for item in scorelist:
+        score_x.append(item[0])
+        score_y.append(item[1])
+    cur.close()
+    con.close()
+    return render_template("index.html",movies=datalist,score_x=score_x,score_y=score_y)
+
+
+
+@app.route('/index')
+def seeindex():
+    return seehome()
+
+if __name__ == '__main__':
+    app.run()
