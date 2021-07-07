@@ -1,0 +1,110 @@
+# -*- coding:utf-8 -*-
+# @Time: 2021/6/26 10:11
+# Author:FeiFei
+# @File:DoubanSpyder.py
+# @Software:PyCharm
+
+from urllib import request
+from bs4 import BeautifulSoup
+import re
+import time
+import sqlite3
+
+# 全局变量
+baseurl = "https://movie.douban.com/top250?start="
+# 正则表达式
+findtitle = re.compile(r'<span class="title">(.*?)</span>')
+findrate = re.compile(r'<span class="rating_num" property="v:average">(.*?)</span>')
+findnum = re.compile(r'<span>(.*?)人评价</span>')
+findinq = re.compile(r'<span class="inq">(.*?)</span>')
+
+dbpath="./douban.db"
+# 爬虫主体
+def main():
+    # 定义url池，设置网页循环次数
+    urllist = geturllist(baseurl, 10)
+    # 爬取网页信息+处理数据
+    datalist = getdata(urllist)
+    # 存储数据
+    initdb(dbpath)
+    savedata2DB(datalist, dbpath)
+    print("执行完毕")
+# url循环函数
+def geturllist(url, times):
+    urllist = []
+    for i in range(times):
+        nurl = baseurl + str(i * 25)
+        urllist.append(nurl)
+    return urllist
+
+
+def getdata(urllist):
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36 Edg/91.0.864.54"}
+    datalist = []
+    for url in urllist:
+        req = request.Request(url=url, headers=headers)
+        response = request.urlopen(req)
+        #         html=response.read().decode("utf-8")
+        html = BeautifulSoup(response, "html.parser")
+        for items in html.find_all("div", class_="item"):
+            data = []  # 存储一部影片的数据
+            items = str(items)
+            title = re.findall(findtitle, items)
+            if (len(title) == 2):
+                ctitle = title[0]
+                data.append(ctitle)
+                otitle = title[1].replace("/", "").replace("\xa0", "")
+                data.append(otitle)
+            else:
+                data.append(title[0])
+                data.append("")
+            rate = re.findall(findrate, items)[0]
+            data.append(rate)
+            num = re.findall(findnum, items)[0]
+            data.append(num)
+            inq = re.findall(findinq, items)
+            if len(inq)==1:
+                data.append(inq[0].replace("。", ""))
+            else:
+                data.append("")
+            datalist.append(data)
+        time.sleep(2)
+    return datalist
+
+def initdb(dbpath):
+    conn=sqlite3.connect(dbpath)
+    cur=conn.cursor()
+    sql='''
+    create table movie250
+    (
+    id integer primary key autoincrement,
+    cname varchar not null,
+    oname varchar,
+    score numeric,
+    people numeric,
+    inq varchar
+    )
+    '''
+    cur.execute(sql)
+    conn.commit()
+    cur.close()
+    conn.close()
+
+def savedata2DB(datalist,dbpath):
+    conn=sqlite3.connect(dbpath)
+    cur=conn.cursor()
+    for data in datalist:
+        for index in range(len(data)):
+            data[index]='"'+data[index]+'"'
+        sql='''
+        insert into movie250(cname,oname,score,people,inq)
+        values (%s)
+        '''%",".join(data)
+        cur.execute(sql)
+    cur.close()
+    conn.commit()
+    conn.close()
+
+if __name__ == "__main__":
+    main()
